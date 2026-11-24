@@ -113,6 +113,10 @@ KYO|ORIGINAL|9556109109355
 MEVIUS|ORIGINAL BLUE (BOX)|49401196
 MEVIUS|SKY BLUE KS (BOX)|4902210200804
 MEVIUS|KIMAWI BOX|955900301326
+MEVIUS|WIND BLUE|40329383
+MEVIUS|MENTHOL|01232135
+MEVIUS|MENTHOL WHITE|01239730
+MEVIUS|MENTHOL DUO|4033100054556
 WINSTON|BLUE (BOX)|01231932
 WINSTON|KS RED (BOX)|01231233
 WINSTON|DUO BERRY (BOX)|4033100034268
@@ -122,18 +126,14 @@ SAM A|RED PACK UPGRADE|89990568
 SAM A|MTL PACK UPGRADE|89990469
 LD|RED (BOX)|8885004830004
 LD|BLUE (BOX)|8885004830028
-LD|PURPLE (BOX)|9555900300565`;
+LD|PURPLE (BOX)|9555900300565
+LD|MENTHOL|8885004830042
+LD|ZOOM|9555900300121`;
 const P=RAW.split('\n').map(l=>{const [b,t,c]=l.split('|');return{b,t,c}});
 const G=[];P.forEach(p=>{let g=G.find(x=>x.b===p.b);if(!g)G.push(g={b:p.b,items:[]});g.items.push(p)});
 const SH=['A','B'];
 const $=s=>document.querySelector(s);
-const dl={save:async({filename,data})=>{
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([data],{type:'text/csv'}));
-  a.download=filename;document.body.appendChild(a);a.click();a.remove();
-}};
-window.useFirebase=w=>{db=w;setDate(date)};
-let db=null,date='',shift='A',doc={v:{}},prev=null,q='',timer=null;
+let db=null,dl=null,date='',shift='A',doc={v:{}},prev=null,q='',timer=null;
 
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const dayBefore=s=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()-1);return iso(d)};
@@ -141,15 +141,15 @@ const num=x=>(x===undefined||x===''||x===null)?null:Number(x);
 const val=(d,bc,s,f)=>d&&d.v?d.v[bc+'_'+s+f]:undefined;
 
 async function load(d){
-  if(db){try{const s=await db.doc('kongsi/kota-'+d).get();return s.exists?{v:{},...s.data()}:{v:{}}}catch(e){}}
+  if(db){try{const s=await db.doc('rekod/'+d).get();return s.exists?{v:{},...s.data()}:{v:{}}}catch(e){}}
   try{return {v:{},...JSON.parse(localStorage.getItem('rokok:'+d)||'{}')}}catch(e){return{v:{}}}
 }
 async function save(){
   $('#st').textContent='Menyimpan…';
   let ok=false;
-  if(db){try{await db.doc('kongsi/kota-'+date).set(doc);ok=true}catch(e){}}
+  if(db){try{await db.doc('rekod/'+date).set(doc);ok=true}catch(e){}}
   if(!ok){try{localStorage.setItem('rokok:'+date,JSON.stringify(doc));ok=true}catch(e){}}
-  $('#st').textContent=ok?(db?'Disimpan (online)':'Disimpan (local)'):'Gagal simpan';
+  $('#st').textContent=ok?'Disimpan':'Gagal simpan';
 }
 function queueSave(){clearTimeout(timer);timer=setTimeout(save,600)}
 
@@ -276,31 +276,15 @@ document.addEventListener('input',e=>{
 $('#date').addEventListener('change',e=>{if(e.target.value)setDate(e.target.value)});
 $('#date').value=iso(new Date());
 setDate($('#date').value);
-
-</script>
-
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-const firebaseConfig = {
-  apiKey: "AIzaSyCZYvtRSTiQzHwuId4v8k208PGRPHDLN20",
-  authDomain: "rokok-mne.firebaseapp.com",
-  projectId: "rokok-mne",
-  storageBucket: "rokok-mne.firebasestorage.app",
-  messagingSenderId: "22226035923",
-  appId: "1:22226035923:web:f01ec573ffe7dbbea9a026"
-};
-try {
-  const app = initializeApp(firebaseConfig);
-  const fs = getFirestore(app);
-  const ref = (p) => doc(fs, ...p.split('/'));
-  window.useFirebase({
-    doc: (p) => ({
-      get: async () => { const s = await getDoc(ref(p)); return { exists: s.exists(), data: () => s.data() }; },
-      set: (d) => setDoc(ref(p), d)
-    })
-  });
-} catch (e) { console.error('Firebase gagal:', e); }
+(async()=>{
+  try{
+    if(window.claude){
+      dl=await claude.use('downloads');
+      db=await claude.use('db');
+      if(db||dl)setDate(date);
+    }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
