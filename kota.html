@@ -140,16 +140,39 @@ const dayBefore=s=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()-1);ret
 const num=x=>(x===undefined||x===''||x===null)?null:Number(x);
 const val=(d,bc,s,f)=>d&&d.v?d.v[bc+'_'+s+f]:undefined;
 
+let base={v:{}},unsub=null,fsok=true;
+const clone=o=>JSON.parse(JSON.stringify(o));
+function diff(b,d){
+  const o={},v={};let n=0;
+  for(const k in d){if(k==='v')continue;if(d[k]!==b[k]){o[k]=d[k];n++}}
+  for(const k in (d.v||{})){if(d.v[k]!==(b.v||{})[k]){v[k]=d.v[k];n++}}
+  if(Object.keys(v).length)o.v=v;
+  return n?o:null;
+}
+function remote(r){
+  const dv=diff(base,doc)||{};
+  base.v=base.v||{};
+  for(const k in r){if(k==='v')continue;if(!(k in dv))doc[k]=r[k];base[k]=r[k]}
+  for(const k in (r.v||{})){if(!(dv.v&&k in dv.v))doc.v[k]=r.v[k];base.v[k]=r.v[k]}
+  const a=document.activeElement;
+  if(!(a&&a.tagName==='INPUT'))render();
+}
 async function load(d){
+  if(window.FS){try{const r=await FS.get('kota-'+d);return {v:{},...(r||{})}}catch(e){}}
   if(db){try{const s=await db.doc('rekod/'+d).get();return s.exists?{v:{},...s.data()}:{v:{}}}catch(e){}}
   try{return {v:{},...JSON.parse(localStorage.getItem('rokok:'+d)||'{}')}}catch(e){return{v:{}}}
 }
 async function save(){
   $('#st').textContent='Menyimpan…';
-  let ok=false;
-  if(db){try{await db.doc('rekod/'+date).set(doc);ok=true}catch(e){}}
+  let ok=false,cloud=false;
+  if(window.FS){
+    const ch=diff(base,doc);
+    if(!ch){ok=true;cloud=true}
+    else{try{await FS.set('kota-'+date,ch);base=clone(doc);ok=true;cloud=true}catch(e){}}
+  }
+  if(!ok&&db){try{await db.doc('rekod/'+date).set(doc);ok=true;cloud=true}catch(e){}}
   if(!ok){try{localStorage.setItem('rokok:'+date,JSON.stringify(doc));ok=true}catch(e){}}
-  $('#st').textContent=ok?'Disimpan':'Gagal simpan';
+  $('#st').textContent=!ok?'Gagal simpan':(cloud||!window.FS?'Disimpan':'Setempat sahaja');
 }
 function queueSave(){clearTimeout(timer);timer=setTimeout(save,600)}
 
@@ -250,8 +273,12 @@ function doPrint(){
 }
 async function setDate(d){
   date=d;$('#st').textContent='';
+  if(unsub){unsub();unsub=null}
   [doc,prev]=await Promise.all([load(d),load(dayBefore(d))]);
+  if(d!==date)return;
+  doc.v=doc.v||{};base=clone(doc);
   render();
+  if(window.FS)unsub=FS.watch('kota-'+d,r=>{if(d===date)remote(r)});
 }
 document.addEventListener('click',e=>{
   const b=e.target.closest('#tabs button');
@@ -276,6 +303,7 @@ document.addEventListener('input',e=>{
 $('#date').addEventListener('change',e=>{if(e.target.value)setDate(e.target.value)});
 $('#date').value=iso(new Date());
 setDate($('#date').value);
+window.addEventListener('fsready',()=>setDate(date));
 (async()=>{
   try{
     if(window.claude){
@@ -285,6 +313,17 @@ setDate($('#date').value);
     }
   }catch(e){}
 })();
+</script>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {getFirestore,doc as fdoc,getDoc,setDoc,onSnapshot} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+const fs=getFirestore(initializeApp({projectId:'rokok-mne'}));
+window.FS={
+  get:async id=>{const s=await getDoc(fdoc(fs,'kongsi',id));return s.exists()?s.data():null},
+  set:(id,data)=>setDoc(fdoc(fs,'kongsi',id),data,{merge:true}),
+  watch:(id,cb)=>onSnapshot(fdoc(fs,'kongsi',id),s=>{if(!s.metadata.hasPendingWrites&&s.exists())cb(s.data())})
+};
+window.dispatchEvent(new Event('fsready'));
 </script>
 </body>
 </html>
